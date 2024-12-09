@@ -1,0 +1,13 @@
+{
+    "serial": {
+        "port": "COM4",
+        "baudrate": 9600,
+        "timeout": 1
+    },
+    "settings": {
+        "voltage": 220.0,
+        "current": 2.5,
+        "max_voltage": 300.0,
+        "max_current": 30.0
+    }
+}
