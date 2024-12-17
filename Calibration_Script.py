@@ -90,6 +90,31 @@ class PowerSupply:
         logging.info(f"Sending predefined frame to reset the power supply: {frame.hex().upper()}")
         self.send_frame(frame)
 
+    def get_frame_response(self):
+        """
+        Send the frame "37 03 00 00 00 38 41 8E" to get a response from the power supply.
+
+        :return: The response from the power supply or None if no response.
+        """
+        request_frame = bytes.fromhex("37 03 00 00 00 38 41 8E")
+        self.send_frame(request_frame)
+
+        # Wait for a response
+        try:
+            response = self.connection.read(128)  # Read up to 128 bytes (adjust as needed)
+            if response:
+                logging.info(f"Received response: {response.hex().upper()}")
+                return response
+            else:
+                logging.warning("No response received from power supply.")
+                return None
+        except serial.SerialTimeoutException:
+            logging.error("Timeout while waiting for response.")
+            return None
+        except Exception as e:
+            logging.error(f"Error receiving response: {e}")
+            return None
+
     def close(self):
         """
         Close the connection to the power supply.
@@ -127,7 +152,12 @@ if __name__ == "__main__":
         )
 
         # Example: Reset the power supply
-        power_supply.reset_power_supply()
+        #power_supply.reset_power_supply()
+
+        # Get frame response
+        response = power_supply.get_frame_response()
+        if response:
+            logging.info(f"Frame response received: {response.hex().upper()}")
 
     except serial.SerialException as e:
         logging.error(f"Serial communication error: {e}")
