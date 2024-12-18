@@ -39,44 +39,69 @@ class PowerSupply:
     def calculate_hex_values(self, value):
         """
         Calculate the hex representation of a value based on its scaling factor.
-
+        
         :param value: The actual value (e.g., voltage or current).
         :return: Hexadecimal string of the scaled value.
         """
-        # Determine the scaling factor based on the number of digits before the decimal point
-        value_str = str(value).split(".")[0]  # Get the integer part of the number as a string
-        num_digits = len(value_str)
+        # Ensure the value is within the acceptable range
+        if value < 0:
+            raise ValueError("Value cannot be negative.")
 
-        if num_digits == 1:
-            scale = 10000
-        elif num_digits == 2:
-            scale = 1000
-        elif num_digits == 3:
-            scale = 100
+        # Choose the scaling factor
+        if value < 10:
+            scale = 10000  # Scale for very small values (1 digit)
+        elif value < 100:
+            scale = 100   # Scale for values between 10 and 99 (2 digits)
+        elif value < 1000:
+            scale = 10    # Scale for values between 100 and 999 (3 digits)
         else:
             raise ValueError("Value is too large for this scaling logic.")
 
         # Scale the value and return as a 4-digit hex
         scaled_value = int(value * scale)
+        
+        # Ensure the hex string is always 4 digits long, even if the value is small
         return f"{scaled_value:04X}"  # Format as 4-digit hex
 
-    def set_voltage_and_current(self, voltage, current):
+    def get_power_factor_hex(self, power_factor):
         """
-        Send a frame to set voltage and current on the power supply.
+        Map the power factor to its corresponding hex value.
+
+        :param power_factor: The power factor value (e.g., 1, 0.5L, 0.5C, etc.)
+        :return: The hex string corresponding to the power factor.
+        """
+        power_factor_map = {
+            1: "00 00",
+            "0.5L": "17 70",
+            "0.5C": "75 30",
+            "0.8C": "7E 39",
+            "0.8L": "0E 67"
+        }
+        
+        return power_factor_map.get(power_factor, "00 00")  # Default to "00 00" if power factor is not found
+
+    def set_voltage_and_current_Powerfactor(self, voltage, current, power_factor):
+        """
+        Send a frame to set voltage, current, and power factor on the power supply.
 
         :param voltage: Voltage in volts.
         :param current: Current in amps.
+        :param power_factor: Power factor to be set.
         """
         voltage_hex = self.calculate_hex_values(voltage)
         current_hex = self.calculate_hex_values(current)
+        
+        # Get the power factor hex
+        power_factor_hex = self.get_power_factor_hex(power_factor)
 
+        # Construct the frame with power factor inserted
         frame = bytes.fromhex(
-            f"F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 {voltage_hex} {voltage_hex} {voltage_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 00 00 00 00 2E E0 5D C0 00 00 2F A5"
+            f"F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 {voltage_hex} {voltage_hex} {voltage_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 {current_hex} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} 2E E0 5D C0 00 00 B8 06"
         )
-        logging.info(f"Sending frame to set voltage: {voltage}V and current: {current}A")
+        logging.info(f"Sending frame to set voltage: {voltage}V, current: {current}A, and power factor: {power_factor}")
         
         # Print the frame in hexadecimal format
-        print(f"Frame to set voltage {voltage}V and current {current}A: {frame.hex().upper()}")
+        print(f"Frame to set voltage {voltage}V, current {current}A, and power factor {power_factor}: {frame.hex().upper()}")
         
         self.send_frame(frame)
 
@@ -127,7 +152,7 @@ class PowerSupply:
 
 
 if __name__ == "__main__":
-    power_supply = None  # Initialize variable to avoid NameError in the `finally` block
+    power_supply = None  # Initialize variable to avoid NameError in the finally block
 
     try:
         # Load configuration from file
@@ -145,10 +170,11 @@ if __name__ == "__main__":
             timeout=serial_config.get("timeout", 1)
         )
 
-        # Example: Set voltage and current from configuration
-        power_supply.set_voltage_and_current(
+        # Example: Set voltage, current, and power factor from configuration
+        power_supply.set_voltage_and_current_Powerfactor(
             voltage=settings["voltage"],
-            current=settings["current"]
+            current=settings["current"],
+            power_factor=settings["power_factor"]
         )
 
         # Example: Reset the power supply

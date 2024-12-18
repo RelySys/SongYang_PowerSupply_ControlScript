@@ -5,8 +5,9 @@
         "timeout": 1
     },
     "settings": {
-        "voltage": 100.0,
-        "current": 2.0,
+        "voltage": 60.0,
+        "current": 1.0,
+        "power_factor": "0.5L",
         "max_voltage": 300.0,
         "max_current": 30.0
     }
