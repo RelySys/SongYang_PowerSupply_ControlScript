@@ -96,7 +96,7 @@ class PowerSupply:
 
         # Construct the frame with power factor inserted
         frame = bytes.fromhex(
-            f"F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 {voltage_hex} {voltage_hex} {voltage_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 {current_hex} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} 2E E0 5D C0 00 00 B8 06"
+            f"F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 {voltage_hex} {voltage_hex} {voltage_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 {current_hex} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} 2E E0 5D C0 00 00 F5 02"
         )
         logging.info(f"Sending frame to set voltage: {voltage}V, current: {current}A, and power factor: {power_factor}")
         
@@ -126,7 +126,7 @@ class PowerSupply:
 
         # Wait for a response
         try:
-            response = self.connection.read(128)  # Read up to 128 bytes (adjust as needed)
+            response = self.connection.read(1024)  # Read up to 128 bytes (adjust as needed)
             if response:
                 logging.info(f"Received response: {response.hex().upper()}")
                 return response
@@ -150,6 +150,32 @@ class PowerSupply:
         except Exception as e:
             logging.error(f"Error closing connection: {e}")
 
+    def extract_voltage_and_current(self, frame):
+        """
+        Extract the voltage and current values from the received frame.
+
+        :param frame: The received frame in bytes.
+        :return: Extracted voltage and current values.
+        """
+        # Extract the voltage (0A AB DF)
+        voltage_bytes = frame[6:9]  # Assuming the voltage bytes are at positions 4 to 6
+        voltage_scaled = int.from_bytes(voltage_bytes, byteorder='big')
+        voltage = voltage_scaled / 10000  # Scale the value back by 10000
+        
+        # Extract the current (73 5D 62)
+        current_bytes = frame[18:21]  # Assuming the current bytes are at positions 14 to 19
+        current_scaled = int.from_bytes(current_bytes, byteorder='big')
+        current = current_scaled / 1000000  # Scale the value back by 1000000
+        current /= 2
+        
+        # Log the extracted voltage and current values along with their corresponding hex
+        voltage_hex = voltage_bytes.hex().upper()
+        current_hex = current_bytes.hex().upper()
+        
+        logging.info(f"Voltage (Hex): {voltage_hex}, Extracted Voltage: {voltage}V")
+        logging.info(f"Current (Hex): {current_hex}, Extracted Current: {current}A")
+        
+        return voltage, current
 
 if __name__ == "__main__":
     power_supply = None  # Initialize variable to avoid NameError in the finally block
@@ -170,6 +196,9 @@ if __name__ == "__main__":
             timeout=serial_config.get("timeout", 1)
         )
 
+        # Example: Reset the power supply
+        # power_supply.reset_power_supply()
+
         # Example: Set voltage, current, and power factor from configuration
         power_supply.set_voltage_and_current_Powerfactor(
             voltage=settings["voltage"],
@@ -177,13 +206,12 @@ if __name__ == "__main__":
             power_factor=settings["power_factor"]
         )
 
-        # Example: Reset the power supply
-        #power_supply.reset_power_supply()
-
         # Get frame response
         response = power_supply.get_frame_response()
         if response:
             logging.info(f"Frame response received: {response.hex().upper()}")
+            # Extract voltage and current from the response frame
+            voltage, current = power_supply.extract_voltage_and_current(response)
 
     except serial.SerialException as e:
         logging.error(f"Serial communication error: {e}")
