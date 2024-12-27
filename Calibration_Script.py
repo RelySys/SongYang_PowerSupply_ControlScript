@@ -72,10 +72,10 @@ class PowerSupply:
         """
         power_factor_map = {
             1: "00 00",
-            "0.5L": "17 70",
-            "0.5C": "75 30",
-            "0.8C": "7E 39",
-            "0.8L": "0E 67"
+            "0.5L": "17 70",  # 60
+            "0.5C": "75 30",  # 30
+            "0.8C": "7E 39",  # 32.3
+            "0.8L": "0E 67"   # 36.8
         }
         
         return power_factor_map.get(power_factor, "00 00")  # Default to "00 00" if power factor is not found
@@ -152,32 +152,54 @@ class PowerSupply:
 
     def extract_voltage_and_current(self, frame):
         """
-        Extract the voltage and current values from the received frame.
+        Extract the voltage, current, and power factor values from the received frame.
 
         :param frame: The received frame in bytes.
-        :return: Extracted voltage and current values.
+        :return: Extracted voltage, current, and power factor values.
         """
         # Extract the voltage (0A AB DF)
-        voltage_bytes = frame[6:9]  # Assuming the voltage bytes are at positions 4 to 6
+        voltage_bytes = frame[6:9]  # Assuming the voltage bytes are at positions 6 to 8
         voltage_scaled = int.from_bytes(voltage_bytes, byteorder='big')
         voltage = voltage_scaled / 10000  # Scale the value back by 10000
         
         # Extract the current (73 5D 62)
-        current_bytes = frame[18:21]  # Assuming the current bytes are at positions 14 to 19
+        current_bytes = frame[18:21]  # Assuming the current bytes are at positions 18 to 20
         current_scaled = int.from_bytes(current_bytes, byteorder='big')
         current = current_scaled / 1000000  # Scale the value back by 1000000
-        current /= 2
+        current /= 2  # Divide by 2 as per your original logic
         
-        # Log the extracted voltage and current values along with their corresponding hex
+        # Extract the power factor (bytes 106-109)
+        power_factor_bytes = frame[106:109]  # Power factor bytes at positions 106 to 109
+        power_factor_scaled = int.from_bytes(power_factor_bytes, byteorder='big')
+        power_factor_value = power_factor_scaled / 10000.0  # Convert to decimal by dividing by 10000
+        
+        # Determine the power factor category based on the value
+        if power_factor_value == 0:
+            power_factor = "1.0 Unity"
+        elif 59.0 <= power_factor_value <= 61.0:
+            power_factor = "0.5L"
+        elif 29.0 <= power_factor_value <= 31.0:
+            power_factor = "0.5C"
+        elif 31.0 <= power_factor_value <= 33.0:
+            power_factor = "0.8C"
+        elif 35.0 <= power_factor_value <= 37.0:
+            power_factor = "0.8L"
+        else:
+            power_factor = "Unknown"  # If it falls outside of the known ranges
+        
+        # Log the extracted values and their corresponding hex
         voltage_hex = voltage_bytes.hex().upper()
         current_hex = current_bytes.hex().upper()
+        power_factor_hex = power_factor_bytes.hex().upper()
         
         logging.info(f"Voltage (Hex): {voltage_hex}, Extracted Voltage: {voltage}V")
         logging.info(f"Current (Hex): {current_hex}, Extracted Current: {current}A")
+        logging.info(f"Power Factor (Hex): {power_factor_hex}, Extracted Power Factor: {power_factor_value} -> {power_factor}")
         
-        return voltage, current
+        return voltage, current, power_factor
 
-if __name__ == "__main__":
+
+""" if __name__ == "__main__":
     power_supply = None  # Initialize variable to avoid NameError in the finally block
 
     try:
@@ -219,4 +241,4 @@ if __name__ == "__main__":
         logging.error(f"An error occurred: {e}")
     finally:
         if power_supply is not None:
-            power_supply.close()
+            power_supply.close() """
