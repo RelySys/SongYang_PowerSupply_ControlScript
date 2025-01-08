@@ -4,7 +4,7 @@ import serial
 import sys
 import os
 import time  # Import time module for sleep function
-from Calibration_Script import PowerSupply  # Import PowerSupply class from Calibration_Script
+from Power_Supply_Control import PowerSupply  # Import PowerSupply class from Calibration_Script
 # Add the path to the dlt645 module
 sys.path.append(r'E:\Git\SongYang_PowerSupply_ControlScript\dlt645\dlt645')
 
