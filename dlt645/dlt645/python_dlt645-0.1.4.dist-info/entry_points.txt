@@ -1,0 +1,4 @@
+[console_scripts]
+dlt645_addr=dlt645.cli:getaddr
+dlt645_aen=dlt645.cli:getaen
+

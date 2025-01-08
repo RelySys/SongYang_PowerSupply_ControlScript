@@ -1,6 +1,6 @@
 import logging
 import serial
-import json
+#import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -50,9 +50,9 @@ class PowerSupply:
         # Choose the scaling factor
         if value < 10:
             scale = 10000  # Scale for very small values (1 digit)
-        elif value < 100:
-            scale = 100   # Scale for values between 10 and 99 (2 digits)
         elif value < 1000:
+            scale = 100   # Scale for values between 10 and 99 (2 digits)
+        elif value < 100:
             scale = 10    # Scale for values between 100 and 999 (3 digits)
         else:
             raise ValueError("Value is too large for this scaling logic.")
@@ -96,7 +96,7 @@ class PowerSupply:
 
         # Construct the frame with power factor inserted
         frame = bytes.fromhex(
-            f"F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 {voltage_hex} {voltage_hex} {voltage_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 {current_hex} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} 2E E0 5D C0 00 00 F5 02"
+            f"F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 {voltage_hex} {voltage_hex} {voltage_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 {current_hex} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} 2E E0 5D C0 00 00 05 66"
         )
         logging.info(f"Sending frame to set voltage: {voltage}V, current: {current}A, and power factor: {power_factor}")
         
@@ -110,7 +110,7 @@ class PowerSupply:
         Send a predefined frame to reset the power supply.
         """
         frame = bytes.fromhex(
-            "F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 2E E0 5D C0 00 00 7C B2"
+            "F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 2E E0 5D C0 00 00 D4 04"
         )
         logging.info(f"Sending predefined frame to reset the power supply: {frame.hex().upper()}")
         self.send_frame(frame)
@@ -158,23 +158,41 @@ class PowerSupply:
         :return: Extracted voltage, current, and power factor values.
         """
         # Extract the voltage (0A AB DF)
-        voltage_bytes = frame[6:9]  # Assuming the voltage bytes are at positions 6 to 8
+        voltage_bytes = frame[14:17]  # Assuming the voltage bytes are at positions 6 to 8
         voltage_scaled = int.from_bytes(voltage_bytes, byteorder='big')
         voltage = voltage_scaled / 10000  # Scale the value back by 10000
         
+        voltage_bytes_Y = frame[18:21]  # Assuming the voltage bytes are at positions 6 to 8
+        voltage_scaled = int.from_bytes(voltage_bytes_Y, byteorder='big')
+        voltage_Y = voltage_scaled / 10000  # Scale the value back by 10000
+
+        voltage_bytes_B = frame[22:25]  # Assuming the voltage bytes are at positions 6 to 8
+        voltage_scaled = int.from_bytes(voltage_bytes_B, byteorder='big')
+        voltage_B = voltage_scaled / 10000  # Scale the value back by 10000
+
         # Extract the current (73 5D 62)
-        current_bytes = frame[18:21]  # Assuming the current bytes are at positions 18 to 20
+        current_bytes = frame[26:29]  # Assuming the current bytes are at positions 18 to 20
         current_scaled = int.from_bytes(current_bytes, byteorder='big')
         current = current_scaled / 1000000  # Scale the value back by 1000000
         current /= 2  # Divide by 2 as per your original logic
+
+        current_bytes_Y = frame[26:29]  # Assuming the current bytes are at positions 18 to 20
+        current_scaled = int.from_bytes(current_bytes_Y, byteorder='big')
+        current_Y = current_scaled / 1000000  # Scale the value back by 1000000
+        current_Y /= 2  # Divide by 2 as per your original logic
+
+        current_bytes_B = frame[26:29]  # Assuming the current bytes are at positions 18 to 20
+        current_scaled = int.from_bytes(current_bytes_B, byteorder='big')
+        current_B = current_scaled / 1000000  # Scale the value back by 1000000
+        current_B /= 2  # Divide by 2 as per your original logic
         
         # Extract the power factor (bytes 106-109)
-        power_factor_bytes = frame[106:109]  # Power factor bytes at positions 106 to 109
+        power_factor_bytes = frame[114:117]  # Power factor bytes at positions 106 to 109
         power_factor_scaled = int.from_bytes(power_factor_bytes, byteorder='big')
         power_factor_value = power_factor_scaled / 10000.0  # Convert to decimal by dividing by 10000
         
         # Determine the power factor category based on the value
-        if power_factor_value == 0:
+        if  power_factor_value <= 1.0:
             power_factor = "1.0 Unity"
         elif 59.0 <= power_factor_value <= 61.0:
             power_factor = "0.5L"
@@ -185,60 +203,19 @@ class PowerSupply:
         elif 35.0 <= power_factor_value <= 37.0:
             power_factor = "0.8L"
         else:
-            power_factor = "Unknown"  # If it falls outside of the known ranges
+            power_factor = "Unknown"  # If it falls out side of the known ranges
         
         # Log the extracted values and their corresponding hex
         voltage_hex = voltage_bytes.hex().upper()
         current_hex = current_bytes.hex().upper()
         power_factor_hex = power_factor_bytes.hex().upper()
         
-        logging.info(f"Voltage (Hex): {voltage_hex}, Extracted Voltage: {voltage}V")
-        logging.info(f"Current (Hex): {current_hex}, Extracted Current: {current}A")
-        logging.info(f"Power Factor (Hex): {power_factor_hex}, Extracted Power Factor: {power_factor_value} -> {power_factor}")
+        logging.info(f"Voltage (Hex): {voltage_hex}, Extracted Voltage R PHASE: {voltage}V")
+        logging.info(f"Voltage (Hex): {voltage_hex}, Extracted Voltage Y PHASE: {voltage_Y}V")
+        logging.info(f"Voltage (Hex): {voltage_hex}, Extracted Voltage B PHASE: {voltage_B}V")
+        logging.info(f"Current (Hex): {current_hex}, Extracted Current R phase: {current}A")
+        logging.info(f"Current (Hex): {current_hex}, Extracted Current Y phase: {current_Y}A")
+        logging.info(f"Current (Hex): {current_hex}, Extracted Current B phase: {current_B}A")
+        #logging.info(f"Power Factor (Hex): {power_factor_hex}, Extracted Power Factor: {power_factor_value} -> {power_factor}")
         
-        return voltage, current, power_factor
-
-
-""" if __name__ == "__main__":
-    power_supply = None  # Initialize variable to avoid NameError in the finally block
-
-    try:
-        # Load configuration from file
-        with open("config.json", "r") as config_file:
-            config = json.load(config_file)
-
-        # Extract serial settings from config
-        serial_config = config["serial"]
-        settings = config["settings"]
-
-        # Initialize PowerSupply object
-        power_supply = PowerSupply(
-            port=serial_config["port"],
-            baudrate=serial_config.get("baudrate", 9600),
-            timeout=serial_config.get("timeout", 1)
-        )
-
-        # Example: Reset the power supply
-        # power_supply.reset_power_supply()
-
-        # Example: Set voltage, current, and power factor from configuration
-        power_supply.set_voltage_and_current_Powerfactor(
-            voltage=settings["voltage"],
-            current=settings["current"],
-            power_factor=settings["power_factor"]
-        )
-
-        # Get frame response
-        response = power_supply.get_frame_response()
-        if response:
-            logging.info(f"Frame response received: {response.hex().upper()}")
-            # Extract voltage and current from the response frame
-            voltage, current = power_supply.extract_voltage_and_current(response)
-
-    except serial.SerialException as e:
-        logging.error(f"Serial communication error: {e}")
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
-    finally:
-        if power_supply is not None:
-            power_supply.close() """
+        return voltage, current

@@ -1,0 +1,69 @@
+Metadata-Version: 2.1
+Name: python-dlt645
+Version: 0.1.4
+Summary: A basic DL/T645-2007 communication implementation
+Home-page: https://github.com/gams/python-dlt645
+License: MIT
+Author: Stefan 'hr' Berder
+Author-email: stefan@measureofquality.com
+Requires-Python: >=3.9,<4.0
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Provides-Extra: cli
+Requires-Dist: pyserial (>=3.5,<4.0); extra == "cli"
+Project-URL: Documentation, https://python-dlt645.readthedocs.io/en/latest/
+Project-URL: Repository, https://github.com/gams/python-dlt645
+Description-Content-Type: text/x-rst
+
+#################################################################
+python-dlt645 - A basic DL/T645-2007 communication implementation
+#################################################################
+
+An incomplete implementation of the DL/T645 protocol designed to communicate
+with energy meters through an infrared interface.
+
+Getting started
+===============
+
+To isntall the DL/T645 package only:
+
+.. code-block:: shell
+
+    $ pip install python-dlt645
+
+To install the package with the utility CLI commands:
+
+.. code-block:: shell
+
+    $ pip install python-dlt645[cli]
+
+Development
+===========
+
+When cloning the repository for the first time:
+
+.. code-block:: shell
+
+    $ poetry install
+    $ pre-commit install
+
+Tests pre commit
+----------------
+
+.. code-block:: shell
+
+    $ black --diff dlt645/
+    $ flake8 dlt645/
+
+Documentation
+=============
+
+Build the documentation:
+
+.. code-block:: shell
+
+    $ make docs
+
