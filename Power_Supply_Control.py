@@ -5,6 +5,25 @@ import serial
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Define a lookup table for frames based on voltage, current, and power factor
+lookup_table = {
+    (0, 0, 0): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 00 00 00 00 00 00 05 f5 e1 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 2e e0 5d c0 00 00 99 57",
+
+    (220, 2, 1): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 4e 20 00 00 4e 20 00 00 4e 20 00 00 00 00 00 00 2e e0 5d c0 00 00 05 66 ",
+    (220, 2, "0.5L"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 4e 20 00 00 4e 20 00 00 4e 20 17 70 17 70 17 70 2e e0 5d c0 00 00 7f 33",
+    (220, 2, "0.5C"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 4e 20 00 00 4e 20 00 00 4e 20 75 30 75 30 75 30 2e e0 5d c0 00 00 06 37",
+    (220, 2, "0.8C"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 4e 20 00 00 4e 20 00 00 4e 20 7e 39 7e 39 7e 39 2e e0 5d c0 00 00 0e 76 ",
+    (220, 2, "0.8L"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 4e 20 00 00 4e 20 00 00 4e 20 0e 67 0e 67 0e 67 2e e0 5d c0 00 00 70 49 ",
+
+    (220, 3, 1): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 75 30 00 00 75 30 00 00 75 30 00 00 00 00 00 00 2e e0 5d c0 00 00 aa d4",
+    (220, 3, "0.8L"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 75 30 00 00 75 30 00 00 75 30 0e 67 0e 67 0e 67 2e e0 5d c0 00 00 df fb",
+    (220, 3, "0.8C"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 75 30 00 00 75 30 00 00 75 30 7e 39 7e 39 7e 39 2e e0 5d c0 00 00 a1 c4",
+    (220, 3, "0.5L"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 75 30 00 00 75 30 00 00 75 30 17 70 17 70 17 70 2e e0 5d c0 00 00 d0 81",
+    (220, 2, "0.5C"): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 55 f0 55 f0 55 f0 00 00 75 30 00 00 75 30 00 00 75 30 75 30 75 30 75 30 2e e0 5d c0 00 00 a9 85",
+
+    (200, 2, 1): "f9 f9 f9 f9 f9 b1 10 00 02 00 10 20 13 88 4e 20 4e 20 4e 20 00 00 4e 20 00 00 4e 20 00 00 4e 20 00 00 00 00 00 00 2e e0 5d c0 00 00 2f 9f",
+}
+
 class PowerSupply:
     def __init__(self, port, baudrate=9600, timeout=1):
         """
@@ -82,28 +101,22 @@ class PowerSupply:
 
     def set_voltage_and_current_Powerfactor(self, voltage, current, power_factor):
         """
-        Send a frame to set voltage, current, and power factor on the power supply.
-
-        :param voltage: Voltage in volts.
-        :param current: Current in amps.
-        :param power_factor: Power factor to be set.
+        Send a frame to set voltage, current, and power factor on the power supply,
+        using a lookup table for predefined frames.
         """
-        voltage_hex = self.calculate_hex_values(voltage)
-        current_hex = self.calculate_hex_values(current)
-        
-        # Get the power factor hex
-        power_factor_hex = self.get_power_factor_hex(power_factor)
+        # Create the lookup key tuple
+        key = (voltage, current, power_factor)
 
-        # Construct the frame with power factor inserted
-        frame = bytes.fromhex(
-            f"F9 F9 F9 F9 F9 B1 10 00 02 00 10 20 13 88 {voltage_hex} {voltage_hex} {voltage_hex} 00 00 {current_hex} 00 00 {current_hex} 00 00 {current_hex} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} {power_factor_hex.replace(' ', '')} 2E E0 5D C0 00 00 05 66"
-        )
-        logging.info(f"Sending frame to set voltage: {voltage}V, current: {current}A, and power factor: {power_factor}")
-        
-        # Print the frame in hexadecimal format
-        print(f"Frame to set voltage {voltage}V, current {current}A, and power factor {power_factor}: {frame.hex().upper()}")
-        
-        self.send_frame(frame)
+        # Check if the combination exists in the lookup table
+        if key in lookup_table:
+            # Fetch the corresponding frame from the lookup table
+            frame = bytes.fromhex(lookup_table[key])
+            logging.info(f"Sending frame to set voltage: {voltage}V, current: {current}A, and power factor: {power_factor}")
+            print(f"Frame to set voltage {voltage}V, current {current}A, and power factor {power_factor}: {frame.hex().upper()}")
+            self.send_frame(frame)
+        else:
+            logging.error(f"Configuration for voltage {voltage}V, current {current}A, and power factor {power_factor} not found in the lookup table.")
+            raise ValueError(f"Configuration not found for {voltage}V, {current}A, {power_factor} power factor")
 
     def reset_power_supply(self):
         """
@@ -169,6 +182,7 @@ class PowerSupply:
         voltage_bytes_B = frame[22:25]  # Assuming the voltage bytes are at positions 6 to 8
         voltage_scaled = int.from_bytes(voltage_bytes_B, byteorder='big')
         voltage_B = voltage_scaled / 10000  # Scale the value back by 10000
+        voltage_B += 3.2
 
         # Extract the current (73 5D 62)
         current_bytes = frame[26:29]  # Assuming the current bytes are at positions 18 to 20
@@ -176,12 +190,12 @@ class PowerSupply:
         current = current_scaled / 1000000  # Scale the value back by 1000000
         current /= 2  # Divide by 2 as per your original logic
 
-        current_bytes_Y = frame[26:29]  # Assuming the current bytes are at positions 18 to 20
+        current_bytes_Y = frame[30:33]  # Assuming the current bytes are at positions 18 to 20
         current_scaled = int.from_bytes(current_bytes_Y, byteorder='big')
         current_Y = current_scaled / 1000000  # Scale the value back by 1000000
         current_Y /= 2  # Divide by 2 as per your original logic
 
-        current_bytes_B = frame[26:29]  # Assuming the current bytes are at positions 18 to 20
+        current_bytes_B = frame[34:37]  # Assuming the current bytes are at positions 18 to 20
         current_scaled = int.from_bytes(current_bytes_B, byteorder='big')
         current_B = current_scaled / 1000000  # Scale the value back by 1000000
         current_B /= 2  # Divide by 2 as per your original logic
@@ -218,4 +232,4 @@ class PowerSupply:
         logging.info(f"Current (Hex): {current_hex}, Extracted Current B phase: {current_B}A")
         #logging.info(f"Power Factor (Hex): {power_factor_hex}, Extracted Power Factor: {power_factor_value} -> {power_factor}")
         
-        return voltage, current
+        return voltage, voltage_Y, voltage_B, current, current_Y, current_B

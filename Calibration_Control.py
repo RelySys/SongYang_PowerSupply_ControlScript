@@ -3,6 +3,7 @@ import logging
 import serial
 import sys
 import os
+import math
 import time  # Import time module for sleep function
 from Power_Supply_Control import PowerSupply  # Import PowerSupply class from Calibration_Script
 # Add the path to the dlt645 module
@@ -14,6 +15,7 @@ from Meter_Cal_Control import MeterCalControl  # Import the MeterControl class
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 if __name__ == "__main__":
     power_supply = None  # Initialize variable to avoid NameError in the finally block
@@ -36,76 +38,31 @@ if __name__ == "__main__":
         )
 
         # Initialize MeterControl object for the energy meter
-        meter_control = MeterCalControl(port="COM19", baudrate=115200) 
-
-       
+        meter_control = MeterCalControl(port="COM20", baudrate=115200) 
 
         # Example: Set voltage, current, and power factor from configuration for power supply
-        power_supply.set_voltage_and_current_Powerfactor(
-            voltage=settings["voltage"],
-            current=settings["current"],
-            power_factor=settings["power_factor"]
-        )
+        set_power_supply = input("Do you want to change the power supply values? (yes/no): ").strip().lower()
+
+        if set_power_supply == 'yes':
+            power_supply.set_voltage_and_current_Powerfactor(
+                voltage=settings["voltage"],
+                current=settings["current"],
+                power_factor=settings["power_factor"]
+            )
 
         # Add a delay of 100ms before getting the response
-        time.sleep(3)
+            time.sleep(8)
 
         # Get frame response from the power supply
-        response = power_supply.get_frame_response()
-        if response:
-           #logging.info(f"Frame response received: {response.hex().upper()}")
-            # Extract voltage and current from the response frame
-            voltage, current = power_supply.extract_voltage_and_current(response)
-        print()
+        # response = power_supply.get_frame_response()
+        # if response:
+        #     # Extract voltage and current from the response frame
+        #     Voltage, Voltage_Y, Voltage_B, Current, Current_Y, Current_B = power_supply.extract_voltage_and_current(response)
+        #     time.sleep(4)
 
-       # to disturb calibration 
-        print("\nDisturbing Voltage and Current registers\n")
-
-        meter_control.write_meter_data(0x0061, 0x8000)  # Rphase Voltage gain reg
-        meter_control.write_meter_data(0x0065, 0x8000)  # Yphase Voltage gain reg
-        meter_control.write_meter_data(0x0069, 0x8000)  # Bphase Voltage gain reg
-
-        meter_control.write_meter_data(0x0062, 0x8000)  # Rphase Current gain reg
-        meter_control.write_meter_data(0x0066, 0x8000)  # Yphase Current gain reg
-        meter_control.write_meter_data(0x006A, 0x8000)  # Bphase Current gain reg
-
-        print("\n reading Voltage, Current and Power registers after disturbance\n")
-
-        meter_control.get_meter_data(0x00D9, 0x00E9)  # R-Phase //read voltage
-        meter_control.get_meter_data(0x00DA, 0x00EA)  # Y-Phase //read voltage
-        meter_control.get_meter_data(0x00DB, 0x00EB)  # B-Phase //read voltage
-
-        meter_control.get_meter_data(0x00DD, 0x00ED)  # R-Phase //read current
-        meter_control.get_meter_data(0x00DE, 0x00EE)  # R-Phase //read current
-        meter_control.get_meter_data(0x00DF, 0x00EF)  # R-Phase //read current
-
-        meter_control.get_meter_data(0x00B1, 0x00C1)  # R-Phase //read power
-        meter_control.get_meter_data(0x00B2, 0x00C2)  # y-Phase //read power
-        meter_control.get_meter_data(0x00B3, 0x00C3)  # B-Phase //read power
-
-        # disturb gain registers
-        # print("\nDisturbing phase angle gain registers\n")
-
-        # meter_control.write_meter_data(0x0061, 0x8000)  # Rphase Phase voltage gain reg
-        # meter_control.write_meter_data(0x0065, 0x8000)  # Yphase Phase angle voltage gain reg
-        # meter_control.write_meter_data(0x0069, 0x8000)  # Bphase Phase angle voltage gain reg
-
-        # meter_control.write_meter_data(0x0062, 0x8000)  # Rphase Phase angle current gain reg
-        # meter_control.write_meter_data(0x0066, 0x8000)  # Yphase Phase angle current gain reg
-        # meter_control.write_meter_data(0x006A, 0x8000)  # Bphase Phase angle current gain reg
-
-        # print("\n reading Phase gain registers after disturbance\n")
-
-        # meter_control.get_meter_data1(0x0061)  # R-Phase //read voltage
-        # meter_control.get_meter_data1(0x0065)  # Y-Phase //read voltage
-        # meter_control.get_meter_data1(0x0069)  # B-Phase //read voltage
-
-        # meter_control.get_meter_data1(0x0062)  # R-Phase //read current
-        # meter_control.get_meter_data1(0x0066)  # R-Phase //read current
-        # meter_control.get_meter_data1(0x006A)  # R-Phase //read current
+        # print()
 
         print("\nBEFORE CALIBRATION DATA:\n")
-
         meter_control.get_meter_data1(0x0061)   # Voltage gain Rphase
         meter_control.get_meter_data(0x00D9, 0x00E9)  # R-Phase //read voltage
         meter_control.get_meter_data1(0x0065)   # Voltage gain Yphase
@@ -124,33 +81,108 @@ if __name__ == "__main__":
         meter_control.get_meter_data(0x00B2, 0x00C2)  # y-Phase //read power
         meter_control.get_meter_data(0x00B3, 0x00C3)  # B-Phase //read power
 
+        print()
 
-        print("\nCalibrating Voltage and current.......\n")
+        # Ask the user if they want to calibrate voltage and current
+        calibrate_vol_cur = input("Do you want to calibrate voltage and current? (yes/no): ").strip().lower()
 
-        meter_control.calibrate_vol_cur(0x00D9, 0x00E9, 0x0061,  settings["voltage"])   #Voltage calib Rph
-        meter_control.calibrate_vol_cur(0x00DA, 0x00EA, 0x0065, settings["voltage"])  #ltage calib Yphase
-        meter_control.calibrate_vol_cur(0x00DB, 0x00EB, 0x0069, settings["voltage"]) # Voltage calib B phase
+        if calibrate_vol_cur == 'yes':
+            print("writing default values")
+            meter_control.calibration()
+            time.sleep(2)
+            print("\nCalibrating Voltage and Current...")
+            def check_and_calibrate(phase, voltage, current):
+                result = meter_control.get_meter_data(phase[0], phase[1])  # Read voltage
+                print(f"Phase {phase[2]} result: {result}")
+                if 219.5 <= result <= 220.5:
+                    print(f"Calibration for Voltage Phase {phase[2]} successful.")
+                elif 1.997 <= result <= 2.002:
+                    print(f"Calibration for current Phase {phase[2]} successful.")
+                else:
+                    recalibrate = input("calibration is not accurate do you want to recalibarte it?  (yes/no):").strip().lower()
+                    if recalibrate == 'yes':
+                        print(f"Calibration for Phase {phase[2]} failed, recalibrating...")
+                        meter_control.calibrate_vol_cur(phase[0], phase[1], phase[2], voltage)  # Recalibrate
+                        time.sleep(1)  # Allow time for recalibration
+                        check_and_calibrate(phase, voltage, current)  # Recursively check again
+                    else:
+                        print("voltage and current calibration done")
 
-        meter_control.calibrate_vol_cur(0x00DD, 0x00ED, 0x0062, settings["current"])     # Current calib
-        meter_control.calibrate_vol_cur(0x00DE, 0x00EE, 0x0066, settings["current"])  # Current calib
-        meter_control.calibrate_vol_cur(0x00DF, 0x00EF, 0x006A,settings["current"])     # Current calib
+            # Voltage Calibration for R-Phase
+            meter_control.calibrate_vol_cur(0x00D9, 0x00E9, 0x0061, settings["voltage"])  # Voltage calib Rphase
+            # check_and_calibrate([0x00D9, 0x00E9, 0x0061], Voltage, Current)  # Check R-Phase
 
-        # print("\nCalibrating Phase angle.......\n")
+            # Voltage Calibration for Y-Phase
+            meter_control.calibrate_vol_cur(0x00DA, 0x00EA, 0x0065, settings["voltage"])  # Voltage calib Yphase
+            # check_and_calibrate([0x00DA, 0x00EA, 0x0065], Voltage_Y, Current_Y)  # Check Y-Phase
 
-        # meter_control.calibrate_phaseangle(0x0048)  # Voltage gain Rphase
-        # meter_control.calibrate_phaseangle(0x004A)  # Voltage gain Yphase
-        # meter_control.calibrate_phaseangle(0x004C)  # Voltage gain Yphase
+            # Voltage Calibration for B-Phase
+            meter_control.calibrate_vol_cur(0x00DB, 0x00EB, 0x0069, settings["voltage"])  # Voltage calib Bphase
+            # check_and_calibrate([0x00DB, 0x00EB, 0x0069], Voltage_B, Current_B)  # Check B-Phase
 
-        # print("\nCalibrating Power.......\n")
+            # Current Calibration for R-Phase
+            meter_control.calibrate_vol_cur(0x00DD, 0x00ED, 0x0062, settings["current"])  # Current calib Rphase
+            # check_and_calibrate([0x00DD, 0x00ED, 0x0062], Voltage, Current)  # Check R-Phase current
 
-        # meter_control.calibrate_power(0x0047)  # power Rphase
-        # meter_control.calibrate_power(0x0049)  # power Yphase
-        # meter_control.calibrate_power(0x004B)  # power Yphase
+            # Current Calibration for Y-Phase
+            meter_control.calibrate_vol_cur(0x00DE, 0x00EE, 0x0066, settings["current"])  # Current calib Yphase
+            # check_and_calibrate([0x00DE, 0x00EE, 0x0066], Voltage_Y, Current_Y)  # Check Y-Phase current
 
-        time.sleep(3)
+            # Current Calibration for B-Phase
+            meter_control.calibrate_vol_cur(0x00DF, 0x00EF, 0x006A, settings["current"])  # Current calib Bphase
+            # check_and_calibrate([0x00DF, 0x00EF, 0x006A], Voltage_B, Current_B)  # Check B-Phase current
+
+            time.sleep(3)  # Wait for final calibration process to complete
+
+            # meter_control.checksum()
+        
+            # If not calibrating voltage and current, ask if the user wants to calibrate phase angle
+        calibrate_phase_angle = input("Do you want to calibrate the phase angle? (yes/no): ").strip().lower()
+
+        if calibrate_phase_angle == 'yes':
+            # Set power supply to specific values for phase angle calibration
+            print("\nSetting Power Supply to Voltage: 220V, Current: 2A, Power Factor: 0.5 for Phase Angle Calibration...")
+            power_supply.set_voltage_and_current_Powerfactor(
+                voltage=220.0,  # Set to 220V
+                current=2.0,    # Set to 2A
+                power_factor="0.5L"  # Set power factor to 0.5
+                )
+
+            time.sleep(8)
+                
+            # Call the phase angle calibration function
+            print("\nCalibrating Phase Angle...")
+            meter_control.calibrate_phaseangle(0x0048)  # Voltage gain Rphase
+            meter_control.calibrate_phaseangle(0x004A)  # Voltage gain Yphase
+            meter_control.calibrate_phaseangle(0x004C)  # Voltage gain Bphase
+            time.sleep(3)
+            # meter_control.checksum()
+            
+
+        calibrate_Power = input("Do you want to calibrate the power? (yes/no): ").strip().lower()
+
+        if calibrate_Power == 'yes':
+            # Set power supply to specific values for phase angle calibration
+            print("\nSetting Power Supply to Voltage: 220V, Current: 2A, Power Factor: 1 for Phase Angle Calibration...")
+            power_supply.set_voltage_and_current_Powerfactor(
+                voltage=220.0,  # Set to 220V
+                current=2.0,    # Set to 2A
+                power_factor=1  # Set power factor to 1
+                )
+
+            time.sleep(8)
+                
+            # Call the phase angle calibration function
+            print("\nCalibrating Power...")
+            meter_control.calibrate_power(0x0047)  # power r phase
+            meter_control.calibrate_power(0x0049)  # power y phase
+            meter_control.calibrate_power(0x004B)  # power b phase
+            time.sleep(3)
+            # meter_control.checksum()
+            
+            time.sleep(5)
 
         print("\nAFTER CALIBRATION DATA:\n")
-
         meter_control.get_meter_data1(0x0061)   # Voltage gain Rphase
         meter_control.get_meter_data(0x00D9, 0x00E9)  # R-Phase //read voltage
         meter_control.get_meter_data1(0x0065)   # Voltage gain Yphase
@@ -173,13 +205,11 @@ if __name__ == "__main__":
         meter_control.get_meter_data1(0x00FA)   # PA Yphase
         meter_control.get_meter_data1(0x00FB)   # PA Bphase
 
-        meter_control.get_meter_data1(0x00F8)   #Frq
+        meter_control.get_meter_data1(0x00F8)   # Frq
 
+        time.sleep(5)
 
     except serial.SerialException as e:
         logging.error(f"Serial communication error: {e}")
     except Exception as e:
         logging.error(f"An error occurred: {e}")
-    #finally:
-        #if power_supply is not None:
-           # power_supply.close()
