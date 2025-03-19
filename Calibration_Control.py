@@ -29,6 +29,7 @@ if __name__ == "__main__":
         # Extract serial settings from config
         serial_config = config["serial"]
         settings = config["settings"]
+        mtr_serial_config = config["mtr_serial"]
 
         # Initialize PowerSupply object
         power_supply = PowerSupply(
@@ -38,7 +39,10 @@ if __name__ == "__main__":
         )
 
         # Initialize MeterControl object for the energy meter
-        meter_control = MeterCalControl(port="COM20", baudrate=115200) 
+        meter_control = MeterCalControl(
+            port=mtr_serial_config["port"],
+            baudrate=mtr_serial_config["baudrate"]
+        ) 
 
         # Example: Set voltage, current, and power factor from configuration for power supply
         set_power_supply = input("Do you want to change the power supply values? (yes/no): ").strip().lower()
@@ -96,7 +100,7 @@ if __name__ == "__main__":
                 print(f"Phase {phase[2]} result: {result}")
                 if 219.5 <= result <= 220.5:
                     print(f"Calibration for Voltage Phase {phase[2]} successful.")
-                elif 1.997 <= result <= 2.002:
+                elif 2.997 <= result <= 3.002:
                     print(f"Calibration for current Phase {phase[2]} successful.")
                 else:
                     recalibrate = input("calibration is not accurate do you want to recalibarte it?  (yes/no):").strip().lower()
@@ -135,7 +139,7 @@ if __name__ == "__main__":
             time.sleep(3)  # Wait for final calibration process to complete
 
             # meter_control.checksum()
-        
+
             # If not calibrating voltage and current, ask if the user wants to calibrate phase angle
         calibrate_phase_angle = input("Do you want to calibrate the phase angle? (yes/no): ").strip().lower()
 
@@ -144,7 +148,7 @@ if __name__ == "__main__":
             print("\nSetting Power Supply to Voltage: 220V, Current: 2A, Power Factor: 0.5 for Phase Angle Calibration...")
             power_supply.set_voltage_and_current_Powerfactor(
                 voltage=220.0,  # Set to 220V
-                current=2.0,    # Set to 2A
+                current=3.0,    # Set to 2A
                 power_factor="0.5L"  # Set power factor to 0.5
                 )
 
@@ -166,7 +170,7 @@ if __name__ == "__main__":
             print("\nSetting Power Supply to Voltage: 220V, Current: 2A, Power Factor: 1 for Phase Angle Calibration...")
             power_supply.set_voltage_and_current_Powerfactor(
                 voltage=220.0,  # Set to 220V
-                current=2.0,    # Set to 2A
+                current=3.0,    # Set to 2A
                 power_factor=1  # Set power factor to 1
                 )
 
@@ -179,7 +183,7 @@ if __name__ == "__main__":
             meter_control.calibrate_power(0x004B)  # power b phase
             time.sleep(3)
             # meter_control.checksum()
-            
+
             time.sleep(5)
 
         print("\nAFTER CALIBRATION DATA:\n")

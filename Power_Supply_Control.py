@@ -233,3 +233,11 @@ class PowerSupply:
         #logging.info(f"Power Factor (Hex): {power_factor_hex}, Extracted Power Factor: {power_factor_value} -> {power_factor}")
         
         return voltage, voltage_Y, voltage_B, current, current_Y, current_B
+
+# Power_Supply = PowerSupply(port="COM8", baudrate=9600, timeout=1)
+# Power_Supply.set_voltage_and_current_Powerfactor(220, 3, 1)
+#  # Get frame response from the power supply
+# response = Power_Supply.get_frame_response()
+# if response:
+#     # Extract voltage and current from the response frame
+#     Voltage, Voltage_Y, Voltage_B, Current, Current_Y, Current_B = Power_Supply.extract_voltage_and_current(response)

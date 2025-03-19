@@ -1,14 +1,18 @@
 {
     "serial": {
-        "port": "COM26",
+        "port": "COM8",
         "baudrate": 9600,
         "timeout": 1
     },
     "settings": {
         "voltage": 220.0,
-        "current": 2.0,
+        "current": 3.0,
         "power_factor": 1.0,
         "max_voltage": 300.0,
         "max_current": 30.0
+    },
+    "mtr_serial":{
+        "port": "COM10",
+        "baudrate": 115200
     }
 }

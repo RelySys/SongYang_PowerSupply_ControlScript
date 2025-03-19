@@ -3,6 +3,8 @@ import dlt645
 import logging
 import math
 import time 
+import os
+import json
 from dlt645.constants import *
 
 valid_vol_addresses = (0x00D9, 0x00E9, 0x00DA, 0x00EA, 0x00DB, 0x00EB)
@@ -12,7 +14,7 @@ valid_pwr_addresses = (0x00B1, 0x00C1, 0x00B2, 0x00C2, 0x00B3, 0x00C3)
 logging.basicConfig(level=logging.DEBUG)
 
 class MeterCalControl:
-    def __init__(self,port="COM19", baudrate=115200):
+    def __init__(self,port, baudrate):
         self.ser = serial.Serial(
             port=port,
             baudrate=baudrate,
@@ -38,6 +40,20 @@ class MeterCalControl:
             "more": NO_MORE_DATA,
             "function": FUNCTION_CODES[DLT645_1997]["WRITE_DATA"],  # Write function code
         }
+
+    def dec2hex_64bit(self,n):
+        # Convert to 64-bit signed integer (2's complement)
+        if n < 0:
+            # Apply two's complement for negative numbers
+            n = (1 << 64) + n  # Add 2^64 to the negative number
+
+        # Mask the result to get only the last 2 bytes (16 bits)
+        last_2_bytes = n & 0xFFFF  # 0xFFFF is a mask for the last 2 bytes (16 bits)
+
+        # Convert to hexadecimal and format as 4 digits (2 bytes = 4 hex digits)
+        hex_value = format(last_2_bytes, '04X')  # Pad with leading zeros if needed
+
+        return hex_value
 
     def get_meter_data(self,addr1, addr2):
         # Initialize variables to store the results for each register
@@ -83,7 +99,7 @@ class MeterCalControl:
                 addr += 0xE000
             else:
                 addr += 0xD000  # Add 0xD000 to address (as per your original logic)
-            #print(f"Querying address {i + 1}: {hex(addr)}")
+                #print(f"Querying address {i + 1}: {hex(addr)}")
 
             # Prepare the frame
             frame = dlt645.Frame(addr=self.station_addr, control=self.read_control)
@@ -170,7 +186,7 @@ class MeterCalControl:
             print("Current Gain B_phase: ", frame_data.data[0:4], end='\n')
 
         reg1_value = int(frame_data.data[0:4], 16)
-  
+
         valid_addresses = (0x00BC, 0x00BD, 0x00BE, 0x00BF, 0x00F9, 0x00FA, 0x00FB, 0x00F8)
         if valid_addrs in valid_addresses:
                 # Select the msb multiplier based on the address
@@ -188,7 +204,7 @@ class MeterCalControl:
                 result = reg1_value * msb
                 print(f"{name}: {float(result)}\n")
                 return result
-                
+
             else:
                 print(f"Address {hex(addr)} is not valid for conversion.")
         else:
@@ -224,10 +240,11 @@ class MeterCalControl:
 
     def calibrate_vol_cur(self,addr1,addr2,gain_addr,ref_value):
         const_vol_cur_gain = 0
-        #valid_vol_addresses = (0x00D9, 0x00E9, 0x00DA, 0x00EA, 0x00DB, 0x00EB)
-        #valid_cur_addresses = (0x00DD, 0x00ED, 0x00DE, 0x00EE, 0x00DF, 0x00EF)
+        # valid_vol_addresses = (0x00D9, 0x00E9, 0x00DA, 0x00EA, 0x00DB, 0x00EB)
+        # valid_cur_addresses = (0x00DD, 0x00ED, 0x00DE, 0x00EE, 0x00DF, 0x00EF)
 
         vol_cur_gain = self.get_meter_data1(gain_addr)
+        print("vol_cur_gain",{hex(vol_cur_gain)})
 
         if addr1 and addr2 in valid_vol_addresses:
             #ref_value = 220
@@ -247,439 +264,143 @@ class MeterCalControl:
             print("No valid addresses",'\n')
 
         vol_cur_measured_value = self.get_meter_data(addr1, addr2)
+        print("vol_cur_measured_value",vol_cur_measured_value)
 
         new_vol_cur_gain = ((ref_value/vol_cur_measured_value)*const_vol_cur_gain)
-        #print(f"vol_cur gain :{float(new_vol_cur_gain)}")
+        print(f"new_vol_cur_gain :{float(new_vol_cur_gain)}")
 
         rounded_vol_cur_gain = round(new_vol_cur_gain)  # Round to the nearest integer
         hex_rep = '0x'+ format(rounded_vol_cur_gain, '04X')
-      # print(f"vol_cur gain (hex) : {hex_rep}",'\n')
+        print(f"new_vol_cur_gain (hex) : {hex_rep}",'\n')
 
         self.write_meter_data(gain_addr, hex_rep)
-        #self.get_meter_data(addr1, addr2)
-
+        self.get_meter_data(addr1, addr2)
+    
     def calibrate_power(self,gain_addr):
         if gain_addr == 0x0047:
             addr1,addr2 = 0x00B1,0x00C1
-            phase = "R"  # Phase R for gain_addr == 0x0047
         elif gain_addr == 0x0049:
             addr1,addr2 = 0x00B2,0x00C2
-            phase = "Y"  # Phase Y for gain_addr == 0x0049
         elif gain_addr == 0x004B:
             addr1,addr2 = 0x00B3,0x00C3
-            phase = "B"  # Phase B for gain_addr == 0x004B
         else:
             print("no valid register")
             return
- 
-        measured_power = self.get_meter_data(addr1, addr2)
-        error = ((measured_power-440)/440)
+
+        # meter_control.write_meter_data(gain_addr, 0x0000)
+        # measured_power = self.get_meter_data(addr1, addr2)
+        total_angle = 0  # Initialize a variable to accumulate the sum of the results
+        for i in range(10):  # Run the loop 10 times, and use i as the loop variable
+            measured_angle = self.get_meter_data(addr1, addr2)
+            time.sleep(0.5)
+            total_angle += measured_angle  # Add the result to the total
+        # Now, calculate the average using the number of iterations
+        average_angle = (total_angle / 10)
+
+        error = ((average_angle-660)/660)
+        print(error)
         error1 = (-error/(1+error))
- 
+        print(error1)
+
         new_power_gain = (error1*32768)
+        print(f"new_power_gain :{float(new_power_gain)}")
+
         rounded_power_gain = round(new_power_gain)  # Round to the nearest integer
- 
+        print(f"rounded_power_gain :", rounded_power_gain)
+
         hex_rep = self.dec2hex_64bit(rounded_power_gain)
-        print(f"Power gain {phase} Phase: {hex_rep}", '\n')
- 
+        print(f"new_power_gain (hex) : {hex_rep}", '\n')
+
         self.write_meter_data(gain_addr, hex_rep)
-
-
-    def dec2hex_64bit(self,n):
-            # Convert to 64-bit signed integer (2's complement)
-            if n < 0:
-                # Apply two's complement for negative numbers
-                n = (1 << 64) + n  # Add 2^64 to the negative number
- 
-            # Mask the result to get only the last 2 bytes (16 bits)
-            last_2_bytes = n & 0xFFFF  # 0xFFFF is a mask for the last 2 bytes (16 bits)
- 
-            # Convert to hexadecimal and format as 4 digits (2 bytes = 4 hex digits)
-            hex_value = format(last_2_bytes, '04X')  # Pad with leading zeros if needed
- 
-            return hex_value
  
     def calibrate_phaseangle(self, gain_addr):
         g_phase: float = 3763.739
- 
+
         if gain_addr == 0x0048:
             addr1 = 0x00F9
-            phase = "R"  # Phase R for gain_addr == 0x0047
         elif gain_addr == 0x004A:
             addr1 = 0x00FA
-            phase = "Y"  # Phase R for gain_addr == 0x0047
         elif gain_addr == 0x004C:
             addr1 = 0x00FB
-            phase = "B"  # Phase R for gain_addr == 0x0047
         else:
             print("no valid register")
             return
- 
-        self.write_meter_data(gain_addr,0x0000)
-        measured_angle = self.get_meter_data1(addr1)
-        deg_2_rad = math.cos((measured_angle* 3.141592654) / 180)
- 
+
+        # measured_angle = self.get_meter_data1(addr1)
+        total_angle = 0 # Initialize a variable to accumulate the sum of the results
+        for i in range(10): # Run the loop 10 times, and use i as the loop variable
+            measured_angle = self.get_meter_data1(addr1)
+            time.sleep(0.5)
+            total_angle += measured_angle  # Add the result to the total
+        # Now, calculate the average using the number of iterations (i+1)
+        average_angle = (total_angle / 10)  # i+1 because range starts at 0
+        deg_2_rad = math.cos((average_angle* 3.141592654) / 180)
+        print("deg_2_rad",deg_2_rad)
+
         error = ((deg_2_rad - 0.5) / 0.5) #0.5 = cos(60)
+        print("error",error)
+
         new_angle_gain = error*g_phase
+        print(f"new_angle_gain :{float(new_angle_gain)}")
+
         rounded_angle_gain = round(new_angle_gain)  # Round to the nearest integer
+        print(f"round_new_angle_gain :",rounded_angle_gain)
+
         hex_rep = self.dec2hex_64bit(rounded_angle_gain)
-        print(f"Calib PA {phase} Phase: {hex_rep}", '\n')
- 
+        print(f"new_angle_gain (hex) : {hex_rep}", '\n')
+
         self.write_meter_data(gain_addr, hex_rep)
 
-
-    # def calibration(self):
-    #     self.write_meter_data(0x0003, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0003)
-    #     self.write_meter_data(0x0004, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0004)
-    #     self.write_meter_data(0x0007, 0x0001)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0007)
-    #     self.write_meter_data(0x0008, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0008)
-    #     self.write_meter_data(0x0009, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0009)
-    #     self.write_meter_data(0x000A, 0xFFFF)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x000A)
-    #     self.write_meter_data(0x000B, 0xFFFF)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x000B)
-    #     self.write_meter_data(0x000C, 0xFFFF)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x000C)
-    #     self.write_meter_data(0x000D, 0xFFFF)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x000D)
-    #     self.write_meter_data(0x000E, 0x7E44)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x000E)
-    #     self.write_meter_data(0x0011, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0011)
-    #     self.write_meter_data(0x0012, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0012)
-    #     self.write_meter_data(0x0013, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0013)
-    #     self.write_meter_data(0x0014, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0014)
-    #     self.write_meter_data(0x0016, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0016)
-    #     self.write_meter_data(0x0017, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0017)
-    #     self.write_meter_data(0x001B, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x001B)
-    #     self.write_meter_data(0x001C, 0x00A0)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x001C)
-    #     self.write_meter_data(0x0030, 0x5678)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0030)
-    #     self.write_meter_data(0x0040, 0x5678)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0040)
-    #     self.write_meter_data(0x0050, 0x5678)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0050)
-    #     self.write_meter_data(0x0060, 0x5678)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0060)
-        
-    #     self.write_meter_data(0x0070, 0x0404)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0070)
-    #     self.write_meter_data(0x0031, 0x0861)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0031)
-    #     self.write_meter_data(0x0032, 0xC468)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0032)
-    #     self.write_meter_data(0x0033, 0x0087)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0033)
-    #     self.write_meter_data(0x0034, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0034)
-    #     self.write_meter_data(0x0035, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0035)
-    #     self.write_meter_data(0x0036, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0036)
-    #     self.write_meter_data(0x0037, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0037)
-    #     self.write_meter_data(0x0038, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0038)
-    #     self.write_meter_data(0x0039, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0039)
-    #     self.write_meter_data(0x003A, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x003A)
-    #     self.write_meter_data(0x0041, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0041)
-    #     self.write_meter_data(0x0042, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0042)
-    #     self.write_meter_data(0x0043, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0043)
-    #     self.write_meter_data(0x0044, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0044)
-    #     self.write_meter_data(0x0045, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0045)
-    #     self.write_meter_data(0x0046, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0046)
-    #     self.write_meter_data(0x0047, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0047)
-    #     self.write_meter_data(0x0048, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0048)
-    #     self.write_meter_data(0x0049, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0049)
-    #     self.write_meter_data(0x004A, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x004A)
-    #     self.write_meter_data(0x004B, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x004B)
-    #     self.write_meter_data(0x004C, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x004C)
-    #     self.write_meter_data(0x0051, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0051)
-    #     self.write_meter_data(0x0052, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0052)
-    #     self.write_meter_data(0x0053, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0053)
-    #     self.write_meter_data(0x0054, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0054)
-    #     self.write_meter_data(0x0055, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0055)
-    #     self.write_meter_data(0x0056, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0056)
-    #     self.write_meter_data(0x0061, 0x8000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0061)
-    #     self.write_meter_data(0x0062, 0x8000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0062)
-    #     self.write_meter_data(0x0063, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0063)
-    #     self.write_meter_data(0x0064, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0064)
-    #     self.write_meter_data(0x0065, 0x8000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0065)
-    #     self.write_meter_data(0x0066, 0x8000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0066)
-    #     self.write_meter_data(0x0067, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0067)
-    #     self.write_meter_data(0x0068, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0068)
-    #     self.write_meter_data(0x0069, 0x8000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x0069)
-    #     self.write_meter_data(0x006A, 0x8000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x006A)
-    #     self.write_meter_data(0x006B, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x006B)
-    #     self.write_meter_data(0x006C, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x006C)
-    #     self.write_meter_data(0x006D, 0x7530)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x006D)
-    #     self.write_meter_data(0x006E, 0x0000)
-    #     time.sleep(0.5)
-    #     self.get_meter_data1(0x006E)
-
-    # def checksum(self):
-    #     checksum_3B = self.get_meter_data1(0x003B)
-    #     self.write_meter_data(0x003B, checksum_3B)
-    #     checksum_4D = self.get_meter_data1(0x004D)
-    #     self.write_meter_data(0x004D, checksum_4D) 
-    #     checksum_57 = self.get_meter_data1(0x0057)
-    #     self.write_meter_data(0x0057, checksum_57) 
-    #     checksum_6F = self.get_meter_data1(0x006F)
-    #     self.write_meter_data(0x006F, checksum_6F)
-
     def calibration(self):
-        self.write_meter_data(0x0003, 0x0000)
-        self.get_meter_data1(0x0003)
-        self.write_meter_data(0x0004, 0x0000)
-        self.get_meter_data1(0x0004)
-        self.write_meter_data(0x0007, 0x0001)
-        self.get_meter_data1(0x0007)
-        self.write_meter_data(0x0008, 0x0000)
-        self.get_meter_data1(0x0008)
-        self.write_meter_data(0x0009, 0x0000)
-        self.get_meter_data1(0x0009)
-        self.write_meter_data(0x000A, 0xFFFF)
-        self.get_meter_data1(0x000A)
-        self.write_meter_data(0x000B, 0xFFFF)
-        self.get_meter_data1(0x000B)
-        self.write_meter_data(0x000C, 0xFFFF)
-        self.get_meter_data1(0x000C)
-        self.write_meter_data(0x000D, 0xFFFF)
-        self.get_meter_data1(0x000D)
-        self.write_meter_data(0x000E, 0x7E44)
-        self.get_meter_data1(0x000E)
-        self.write_meter_data(0x0011, 0x0000)
-        self.get_meter_data1(0x0011)
-        self.write_meter_data(0x0012, 0x0000)
-        self.get_meter_data1(0x0012)
-        self.write_meter_data(0x0013, 0x0000)
-        self.get_meter_data1(0x0013)
-        self.write_meter_data(0x0014, 0x0000)
-        self.get_meter_data1(0x0014)
-        self.write_meter_data(0x0016, 0x0000)
-        self.get_meter_data1(0x0016)
-        self.write_meter_data(0x0017, 0x0000)
-        self.get_meter_data1(0x0017)
-        self.write_meter_data(0x001B, 0x0000)
-        self.get_meter_data1(0x001B)
-        self.write_meter_data(0x001C, 0x00A0)
-        self.get_meter_data1(0x001C)
-        self.write_meter_data(0x0030, 0x5678)
-        self.get_meter_data1(0x0030)
-        self.write_meter_data(0x0040, 0x5678)
-        self.get_meter_data1(0x0040)
-        self.write_meter_data(0x0050, 0x5678)
-        self.get_meter_data1(0x0050)
-        self.write_meter_data(0x0060, 0x5678)
-        self.get_meter_data1(0x0060)
+        try:
+            # Load the calibration data from mtr_cal.json
+            with open('mtr_cal.json', 'r') as file:
+                mtr_cal = json.load(file)
+                calibration_data = mtr_cal.get("calibration_data", [])
+
+            if not calibration_data:
+                print("Warning: No calibration data found in mtr_cal.json")
+                return
+
+            # Iterate over the calibration data and call the write/read functions
+            for data in calibration_data:
+                try:
+                    address = int(data["address"], 16)
+                    value = int(data["value"], 16)
+                    
+                    # Write data and verify
+                    self.write_meter_data(address, value)
+                    read_value = self.get_meter_data1(address)
+                    
+                    # Optional: verify if written value matches read value
+                    if read_value != value:
+                        print(f"Warning: Write verification failed for address {hex(address)}")
+                        print(f"Written: {hex(value)}, Read: {hex(read_value)}")
+                    
+                except (KeyError, ValueError) as e:
+                    print(f"Error processing calibration data: {e}")
+                    continue
+        except FileNotFoundError:
+            print("Error: mtr_cal.json file not found")
+        except json.JSONDecodeError:
+            print("Error: Invalid JSON format in mtr_cal.json")
+        except Exception as e:
+            print(f"Unexpected error during calibration: {e}")
     
-        self.write_meter_data(0x0070, 0x0404)
-        self.get_meter_data1(0x0070)
-        self.write_meter_data(0x0031, 0x0861)
-        self.get_meter_data1(0x0031)
-        self.write_meter_data(0x0032, 0xC468)
-        self.get_meter_data1(0x0032)
-        self.write_meter_data(0x0033, 0x0087)
-        self.get_meter_data1(0x0033)
-        self.write_meter_data(0x0034, 0x0000)
-        self.get_meter_data1(0x0034)
-        self.write_meter_data(0x0035, 0x0000)
-        self.get_meter_data1(0x0035)
-        self.write_meter_data(0x0036, 0x0000)
-        self.get_meter_data1(0x0036)
-        self.write_meter_data(0x0037, 0x0000)
-        self.get_meter_data1(0x0037)
-        self.write_meter_data(0x0038, 0x0000)
-        self.get_meter_data1(0x0038)
-        self.write_meter_data(0x0039, 0x0000)
-        self.get_meter_data1(0x0039)
-        self.write_meter_data(0x003A, 0x0000)
-        self.get_meter_data1(0x003A)
-        self.write_meter_data(0x0041, 0x0000)
-        self.get_meter_data1(0x0041)
-        self.write_meter_data(0x0042, 0x0000)
-        self.get_meter_data1(0x0042)
-        self.write_meter_data(0x0043, 0x0000)
-        self.get_meter_data1(0x0043)
-        self.write_meter_data(0x0044, 0x0000)
-        self.get_meter_data1(0x0044)
-        self.write_meter_data(0x0045, 0x0000)
-        self.get_meter_data1(0x0045)
-        self.write_meter_data(0x0046, 0x0000)
-        self.get_meter_data1(0x0046)
-        self.write_meter_data(0x0047, 0x0000)
-        self.get_meter_data1(0x0047)
-        self.write_meter_data(0x0048, 0x0000)
-        self.get_meter_data1(0x0048)
-        self.write_meter_data(0x0049, 0x0000)
-        self.get_meter_data1(0x0049)
-        self.write_meter_data(0x004A, 0x0000)
-        self.get_meter_data1(0x004A)
-        self.write_meter_data(0x004B, 0x0000)
-        self.get_meter_data1(0x004B)
-        self.write_meter_data(0x004C, 0x0000)
-        self.get_meter_data1(0x004C)
-        self.write_meter_data(0x0051, 0x0000)
-        self.get_meter_data1(0x0051)
-        self.write_meter_data(0x0052, 0x0000)
-        self.get_meter_data1(0x0052)
-        self.write_meter_data(0x0053, 0x0000)
-        self.get_meter_data1(0x0053)
-        self.write_meter_data(0x0054, 0x0000)
-        self.get_meter_data1(0x0054)
-        self.write_meter_data(0x0055, 0x0000)
-        self.get_meter_data1(0x0055)
-        self.write_meter_data(0x0056, 0x0000)
-        self.get_meter_data1(0x0056)
-        self.write_meter_data(0x0061, 0x8000)
-        self.get_meter_data1(0x0061)
-        self.write_meter_data(0x0062, 0x8000)
-        self.get_meter_data1(0x0062)
-        self.write_meter_data(0x0063, 0x0000)
-        self.get_meter_data1(0x0063)
-        self.write_meter_data(0x0064, 0x0000)
-        self.get_meter_data1(0x0064)
-        self.write_meter_data(0x0065, 0x8000)
-        self.get_meter_data1(0x0065)
-        self.write_meter_data(0x0066, 0x8000)
-        self.get_meter_data1(0x0066)
-        self.write_meter_data(0x0067, 0x0000)
-        self.get_meter_data1(0x0067)
-        self.write_meter_data(0x0068, 0x0000)
-        self.get_meter_data1(0x0068)
-        self.write_meter_data(0x0069, 0x8000)
-        self.get_meter_data1(0x0069)
-        self.write_meter_data(0x006A, 0x8000)
-        self.get_meter_data1(0x006A)
-        self.write_meter_data(0x006B, 0x0000)
-        self.get_meter_data1(0x006B)
-        self.write_meter_data(0x006C, 0x0000)
-        self.get_meter_data1(0x006C)
-        self.write_meter_data(0x006D, 0x7530)
-        self.get_meter_data1(0x006D)
-        self.write_meter_data(0x006E, 0x0000)
-        self.get_meter_data1(0x006E)
- 
-def checksum(self):
-    checksum_3b = self.get_meter_data1(0x003B)
-    self.write_meter_data(0x003B, checksum_3b)
-    checksum_4d = self.get_meter_data1(0x004D)
-    self.write_meter_data(0x004D, checksum_4d)
-    checksum_57 = self.get_meter_data1(0x0057)
-    self.write_meter_data(0x0057, checksum_57)
-    checksum_6f = self.get_meter_data1(0x006F)
-    self.write_meter_data(0x006F, checksum_6f)
+    def checksum(self):
+        checksum_3b = self.get_meter_data1(0x003B)
+        self.write_meter_data(0x003B, checksum_3b)
+        checksum_4d = self.get_meter_data1(0x004D)
+        self.write_meter_data(0x004D, checksum_4d)
+        checksum_57 = self.get_meter_data1(0x0057)
+        self.write_meter_data(0x0057, checksum_57)
+        checksum_6f = self.get_meter_data1(0x006F)
+        self.write_meter_data(0x006F, checksum_6f)
 
 
+# meter_control = MeterCalControl(port="COM10", baudrate=115200)
 
+# # #Example usage:
+# meter_control.get_meter_data1(0x0061)
  
     
