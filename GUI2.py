@@ -17,8 +17,9 @@ from Meter_Cal_Control import MeterCalControl  # Import the MeterControl class
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 class CalibrationDialog(QtWidgets.QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, meter_control=None):  # Add meter_control parameter
         super().__init__(parent)
+        self.meter_control = meter_control  # Initialize meter_control attribute
         self.setWindowTitle("Calibration")
         self.resize(380, 250)
 
@@ -106,11 +107,12 @@ class CalibrationDialog(QtWidgets.QDialog):
 
         print("writing default values")
         self.calibration_status_label.setText("Writing default values.............")
-        meter_control.calibration()
+        # meter_control.calibration()
+
         # Use QTimer to simulate delays without freezing the UI
         QtCore.QTimer.singleShot(5000, self.calibrate_vol_cur)  # Delay 2 seconds and call the start_calibration_process method
 
-    def calibrate_vol_cur(self):
+    def calibrate_vol_cur(self,meter_control=None,settings=None):
         # Start your calibration process after the delay
         print("\nCalibrating Voltage and Current...")
         self.calibration_status_label.setText("Calibrating Voltage and Current.............")
@@ -126,7 +128,7 @@ class CalibrationDialog(QtWidgets.QDialog):
         # Use QTimer to continue the process after a delay
         QtCore.QTimer.singleShot(3000, self.set_PA_Calibration)  # Delay 3 seconds and then call set_power_supply_1
 
-    def set_PA_Calibration(self):
+    def set_PA_Calibration(self,power_supply=None):
         self.calibration_status_label.setText("Calibrating Phase Angle.............")
         print("\nSetting Power Supply to Voltage: 220V, Current: 2A, Power Factor: 0.5 for Phase Angle Calibration...")
         power_supply.set_voltage_and_current_Powerfactor(
@@ -138,7 +140,7 @@ class CalibrationDialog(QtWidgets.QDialog):
         # Continue with phase angle calibration after the delay
         QtCore.QTimer.singleShot(8000, self.calibrate_phase_angle)  # Delay 8 seconds and call calibrate_phase_angle_1
 
-    def calibrate_phase_angle(self):
+    def calibrate_phase_angle(self,meter_control=None):
         self.calibration_status_label.setText("Calibrating Phase Angle.............")
         print("\nCalibrating Phase Angle...")
         meter_control.calibrate_phaseangle(0x0048)  # Voltage gain Rphase
@@ -148,7 +150,7 @@ class CalibrationDialog(QtWidgets.QDialog):
         # Proceed with the next step after another delay
         QtCore.QTimer.singleShot(3000, self.set_Power_Calibration)  # Delay 3 seconds and then call set_power_supply_2
 
-    def set_Power_Calibration(self):
+    def set_Power_Calibration(self,power_supply=None):
         self.calibration_status_label.setText("Calibrating Power.............")
         print("\nSetting Power Supply to Voltage: 220V, Current: 2A, Power Factor: 1 for Phase Angle Calibration...")
         power_supply.set_voltage_and_current_Powerfactor(
@@ -160,7 +162,7 @@ class CalibrationDialog(QtWidgets.QDialog):
         # Continue with the power calibration after the delay
         QtCore.QTimer.singleShot(8000, self.calibrate_power)  # Delay 8 seconds and then call calibrate_power
 
-    def calibrate_power(self):
+    def calibrate_power(self,meter_control=None):
         self.calibration_status_label.setText("Calibrating Power.............")
         print("\nCalibrating Power...")
         meter_control.calibrate_power(0x0047)  # power r phase
@@ -170,7 +172,7 @@ class CalibrationDialog(QtWidgets.QDialog):
         # Finally, finish calibration after a final delay
         QtCore.QTimer.singleShot(3000, self.finish_calibration)  # Delay 3 seconds and then call finish_calibration
 
-    def finish_calibration(self):
+    def finish_calibration(self,meter_control=None):
         meter_control.checksum()
         print("\nCalibration Completed")
         QtCore.QTimer.singleShot(5000, lambda: self.calibration_status_label.setText("Calibration Completed!"))
@@ -350,10 +352,10 @@ class ResultDialog(QtWidgets.QDialog):
             entryB.setText(f"{funcB():.3f}")
             entryC.setText(f"{funcC():.3f}")
 
-    def open_calibration_dialog(self):
-        # Open the calibration dialog after closing the result dialog
-        calibration_dialog = CalibrationDialog(self)
-        calibration_dialog.exec_()
+def open_calibration_dialog(self):
+    # Open the calibration dialog after closing the result dialog
+    calibration_dialog = CalibrationDialog(self, meter_control=self.meter_control)  # Pass meter_control
+    calibration_dialog.exec_()
 
 class Ui_Dialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
@@ -662,6 +664,7 @@ class Ui_Dialog(QtWidgets.QDialog):
             result_dialog = ResultDialog(parent=self.parent(), meter_control=self.meter_control)
             result_dialog.exec_()
             print("calibration finished")
+            self.open_calibration_dialog()  # Call open_calibration_dialog on the Ui_Dialog object
         except Exception as e:
             print(f"Error in start_calibration: {e}")
 
